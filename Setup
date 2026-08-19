@@ -1,1 +1,424 @@
+Haan, ye possible hai. Aapka exact setup ye ho sakta hai:
+
+Google Form → Google Sheet → Apps Script → WhatsApp API → aapke WhatsApp number se message
+
+Agar aap free + open-source + apna WhatsApp number use karna chahte hain, to main Evolution API recommend karunga. Ye open-source hai, self-host ho sakta hai aur WhatsApp Web/Baileys ke through message bhej sakta hai.
+
+Best option: Evolution API
+
+Evolution API – GitHub
+
+Aapka flow:
+
+Google Form
+    ↓
+Google Sheet
+    ↓
+Apps Script onFormSubmit()
+    ↓
+HTTP POST
+    ↓
+Evolution API
+    ↓
+Your WhatsApp Number
+    ↓
+Customer ko WhatsApp Message
+
+Evolution API me QR code se WhatsApp connect kiya ja sakta hai, aur connected number se REST API ke through text message bheja ja sakta hai.
+
+Step 1 — WhatsApp Web login
+
+Aapko pehle Evolution API apne computer/server par chalani hogi.
+
+Agar aap Windows computer use kar rahe ho, easiest method Docker Desktop hai. Evolution API officially Docker deployment provide karta hai.
+
+Uske baad browser me Evolution API ka panel/API open hoga aur:
+
+Create Instance → QR Code → WhatsApp phone → Linked Devices → Link a device
+
+QR scan kar dena.
+
+Yaani WhatsApp account aapke phone ka hi rahega, bas WhatsApp Web ki tarah API se connected hoga.
+
+Step 2 — Google Sheet
+
+Maan lo Form response Sheet me:
+
+Timestamp	Name	Mobile	Message
+19/08/2026	Rahul	9876543210	Product enquiry
+Step 3 — Apps Script
+
+Google Sheet me:
+
+Extensions → Apps Script
+
+phir ye code:
+
+
+function onFormSubmit(e) {
+
+  const row = e.values;
+
+  const name = row[1];
+  const mobile = row[2];
+
+  const message =
+    "Hello " + name + ",\n\n" +
+    "Thank you for contacting us.\n" +
+    "We have received your enquiry.\n\n" +
+    "Regards,\n" +
+    "Calco Poly Technik Pvt Ltd";
+
+  const apiUrl =
+    "http://YOUR_SERVER_IP:8080/message/sendText/YOUR_INSTANCE";
+
+  const apiKey = "YOUR_API_KEY";
+
+  const payload = {
+    number: "91" + mobile,
+    options: {
+      delay: 1200,
+      presence: "composing"
+    },
+    textMessage: {
+      text: message
+    }
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      "apikey": apiKey
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(apiUrl, options);
+
+  Logger.log(response.getContentText());
+}
+
+Evolution API ka text-message endpoint POST /message/sendText/[instance] hai aur request me number aur text diya jata hai.
+
+Step 4 — Trigger lagana
+
+Apps Script me:
+
+Triggers → Add Trigger
+
+Select:
+
+Function:
+onFormSubmit
+
+
+Event source:
+From spreadsheet
+
+
+Event type:
+On form submit
+
+Ab jab bhi Google Form submit hoga:
+
+
+Form → Sheet → Apps Script → Evolution API → WhatsApp
+
+automatically message chala jayega.
+
+⚠️ Sabse important: "free browser login"
+
+Agar aapka matlab hai:
+
+"Main koi paid WhatsApp API nahi lena chahta. Browser me QR scan karunga aur apne normal WhatsApp se message jayega."
+
+Haan, ye Evolution API ke WhatsApp-Web/Baileys method se ho sakta hai. Official Meta Cloud API se ye same setup nahi hai. Evolution API khud bhi warn karta hai ki WhatsApp-Web-based method official API ki comparison me limitations rakh sakta hai.
+
+Aapke case me main aapko next step me Windows PC par Evolution API ko completely free setup karwa sakta hoon — Docker install se lekar QR scan aur phir Google Sheet Apps Script tak.
+
+
+Step 1 — WhatsApp Web login
+
+Aapko pehle Evolution API apne computer/server par chalani hogi.
+
+Agar aap Windows computer use kar rahe ho, easiest method Docker Desktop hai. Evolution API officially Docker deployment provide karta hai.
+
+Uske baad browser me Evolution API ka panel/API open hoga aur:
+
+Create Instance → QR Code → WhatsApp phone → Linked Devices → Link a device
+
+QR scan kar dena.
+
+ye batao step by step kese step kare
+
+Bilkul. Chaliye Windows PC par zero se setup karte hain. Main aapko ek-ek step dunga; pehle Evolution API ko locally chalayenge, phir WhatsApp QR scan, uske baad Google Apps Script connect karenge.
+
+Important correction: current Evolution API docs me Docker image/configuration me changes aaye hain, isliye main current official documentation ke according setup bata raha hoon. Evolution API open-source hai aur Baileys-based WhatsApp Web connection support karta hai.
+
+
+
+STEP 1 — Docker Desktop install karo
+
+Windows PC par browser kholo aur official Docker Desktop download karo:
+
+Docker Desktop for Windows — Official
+
+Docker Desktop Windows par WSL 2 backend ke saath use kiya ja sakta hai.
+
+Install karne ke baad
+Docker Desktop Installer.exe open karo.
+Installation ke time Use WSL 2 instead of Hyper-V option selected rehne do.
+Installation complete karo.
+Docker Desktop open karo.
+Agar terms/acceptance aaye to Accept karo.
+Docker Desktop me whale icon running hona chahiye.
+
+Docker ki official documentation bhi WSL 2 ko recommended/default backend batati hai.
+
+STEP 2 — Check karo Docker properly chal raha hai
+
+Windows me:
+
+Start → PowerShell
+
+open karo.
+
+Ye command likho:
+
+docker --version
+
+Aisa kuch aana chahiye:
+
+Docker version xx.x.x
+
+Phir:
+
+docker ps
+
+Agar table aa jaye aur koi error nahi aaye, Docker ready hai.
+
+
+STEP 3 — Evolution API folder banao
+
+Desktop par ek folder banao:
+
+EvolutionAPI
+
+Example:
+
+C:\EvolutionAPI
+
+Ab PowerShell me:
+
+cd C:\EvolutionAPI
+
+
+STEP 4 — .env file banao
+
+Notepad kholo aur ye likho:
+
+AUTHENTICATION_API_KEY=AkashEvolution2026@123456
+
+File ko save karo:
+
+C:\EvolutionAPI\.env
+
+⚠️ Dhyan rahe file ka naam:
+
+.env
+
+ho, .env.txt nahi.
+
+STEP 5 — Evolution API start karo
+
+Ab PowerShell me ye command chalao:
+
+docker pull evoapicloud/evolution-api:latest
+
+Current Evolution API repository Docker ke liye evoapicloud/evolution-api:latest image provide karti hai.
+
+Download complete hone ke baad:
+
+docker run -d --name evolution_api -p 8080:8080 --env-file C:\EvolutionAPI\.env evoapicloud/evolution-api:latest
+
+Thoda wait karo.
+
+Phir:
+
+docker ps
+
+Aapko evolution_api naam ka container running dikhna chahiye.
+
+STEP 6 — Browser me check karo
+
+Chrome kholo aur ye address:
+
+Evolution API local server
+
+Agar API correctly start ho gayi hai to response/API page milna chahiye.
+
+Official Docker documentation ke according local deployment ko http://localhost:8080 par access karke verify kiya ja sakta hai.
+
+STEP 7 — Swagger/API page kholo
+
+Browser me:
+
+Evolution API Swagger
+
+
+open karo.
+
+Yahan Evolution API ke endpoints milenge.
+
+STEP 8 — WhatsApp Instance create karna
+
+Ab hum WhatsApp connect karenge.
+
+Evolution API me instance create karne ke liye endpoint available hai:
+
+POST /instance/create
+
+Aur WhatsApp Web/Baileys integration ke liye:
+
+integration: WHATSAPP-BAILEYS
+
+use hota hai. QR code generation bhi supported hai.
+
+Swagger me:
+
+Instance → POST /instance/create
+
+open karo.
+
+Try it out dabao.
+
+Body me approximately:
+
+{
+  "instanceName": "calco-whatsapp",
+  "integration": "WHATSAPP-BAILEYS",
+  "qrcode": true
+}
+
+bhejna hoga.
+
+Lekin yahan ek important point hai: aapke installed Evolution API version ke hisaab se exact Swagger fields/version differ ho sakte hain. Isliye blindly next command nahi dena chahta.
+
+Abhi aap sirf ye 3 steps karo:
+
+1. Docker Desktop install karo
+
+2. PowerShell me:
+
+docker --version
+
+3. Phir:
+
+docker pull evoapicloud/evolution-api:latest
+
+Uske baad mujhe PowerShell ka screenshot bhej do.
+
+Main uske baad aapko STEP 2: Evolution API start → browser me open → instance create → QR code → phone se WhatsApp scan exactly aapke screen ke according karwaunga.
+
+
+Uske baad final me:
+
+Google Form → Google Sheet → Apps Script → WhatsApp automatic message
+
+bhi connect kar denge.
+
+PS C:\Users\ASUS> docker --version
+Docker version 29.7.2, build a7dcaa6
+PS C:\Users\ASUS> STEP 3 — Evolution API folder banao
+Desktop par ek folder banao:
+
+EvolutionAPI
+
+Example:
+
+C:\EvolutionAPI
+
+Ab PowerShell me:
+
+cd C:\EvolutionAPI
+STEP 4 — .env file banao
+
+Notepad kholo aur ye likho:
+
+AUTHENTICATION_API_KEY=AkashEvolution2026@123456
+
+File ko save karo:
+
+C:\EvolutionAPI\.env
+
+⚠️ Dhyan rahe file ka naam:
+
+.env
+
+ho, .env.txt nahi. step 3 or 4 cmd se karte hai
+
+Haan, Step 3 aur Step 4 dono CMD/PowerShell se hi kar sakte hain. Aap abhi PowerShell me ho, to wahi se karo.
+
+STEP 3 — Folder CMD/PowerShell se banao
+
+Ab ye command chalao:
+
+mkdir C:\EvolutionAPI
+
+Phir folder me jao:
+
+cd C:\EvolutionAPI
+
+Check karne ke liye:
+
+pwd
+
+Output ye hona chahiye:
+
+Path
+----
+C:\EvolutionAPI
+STEP 4 — .env file CMD/PowerShell se banao
+
+Ab ye command chalao:
+
+Set-Content -Path "C:\EvolutionAPI\.env" -Value "AUTHENTICATION_API_KEY=AkashEvolution2026@123456"
+
+Ab check karo:
+
+Get-ChildItem -Force
+
+Aapko:
+
+.env
+
+dikhna chahiye.
+
+.env ke andar kya hai check karna ho
+Get-Content C:\EvolutionAPI\.env
+
+Output:
+
+AUTHENTICATION_API_KEY=AkashEvolution2026@123456
+
+
+Abhi tak complete
+
+Aapke paas:
+
+C:\
+└── EvolutionAPI
+    └── .env
+
+hona chahiye.
+
+Abhi Docker run mat karo. Pehle ye commands chalao:
+
+mkdir C:\EvolutionAPI
+cd C:\EvolutionAPI
+Set-Content -Path "C:\EvolutionAPI\.env" -Value "AUTHENTICATION_API_KEY=AkashEvolution2026@123456"
+Get-ChildItem -Force
+Get-Content C:\EvolutionAPI\.env
 
