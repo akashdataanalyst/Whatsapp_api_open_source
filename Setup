@@ -1,424 +1,578 @@
-Haan, ye possible hai. Aapka exact setup ye ho sakta hai:
+Bilkul. Aapka setup Google Sheet → Apps Script → Evolution API → WhatsApp hoga, aur Evolution API ko Oracle Cloud Always Free VM + Docker par permanently run karenge.
 
-Google Form → Google Sheet → Apps Script → WhatsApp API → aapke WhatsApp number se message
+Aapke case mein ye architecture best rahega:
 
-Agar aap free + open-source + apna WhatsApp number use karna chahte hain, to main Evolution API recommend karunga. Ye open-source hai, self-host ho sakta hai aur WhatsApp Web/Baileys ke through message bhej sakta hai.
-
-Best option: Evolution API
-
-Evolution API – GitHub
-
-Aapka flow:
-
-Google Form
-    ↓
 Google Sheet
     ↓
-Apps Script onFormSubmit()
+Google Apps Script
+    ↓ HTTPS
+Oracle Cloud Public IP / Domain
     ↓
-HTTP POST
+Nginx / Cloudflare Tunnel
     ↓
+Evolution API Docker
+    ↓
+WhatsApp
+
+Aapka Evolution API abhi local Windows machine par localhost:3000 par chal raha hai aur WhatsApp sending bhi test ho chuki hai. Ab usko Oracle Cloud par shift kar denge.
+
+Oracle ke current Always Free resources mein Ampere A1 ke total 2 OCPU + 12 GB RAM available hain, isliye 2 OCPU + 8 GB RAM ka VM comfortably banaya ja sakta hai.
+
+Step 1 — Oracle Cloud VM banana
+
+Oracle Cloud Console mein:
+
+Compute → Instances → Create Instance
+
+Settings:
+
+Name
+evolution-api
+Image
+Ubuntu 24.04
+
+Oracle currently Ubuntu 24.04 ke ARM/AArch64 images provide karta hai, jo Ampere A1 ke liye suitable hain.
+
+Shape
+
+Select:
+
+VM.Standard.A1.Flex
+
+Resources:
+
+OCPU: 2
+Memory: 8 GB
+
+Oracle ke Always Free allowance mein 2 OCPU aur 12 GB memory total available hai, so 2 OCPU + 8 GB ek safe configuration hai.
+
+Networking
+
+Ensure:
+
+Assign a public IPv4 address
+
+Oracle ke official guidance mein public IP assign karna bhi recommended deployment flow ka part hai.
+
+SSH Key
+
+Generate SSH key pair select karke private key download kar lena.
+
+Example:
+
+evolution-api.key
+
+Is file ko safe rakhna.
+
+Step 2 — Oracle VM mein SSH
+
+Windows PowerShell se:
+
+ssh -i "C:\Users\YOUR_NAME\Downloads\evolution-api.key" ubuntu@YOUR_PUBLIC_IP
+
+Example:
+
+ssh -i "C:\Users\Akash\Downloads\evolution-api.key" ubuntu@152.xxx.xxx.xxx
+
+Login hone ke baad:
+
+sudo apt update
+sudo apt upgrade -y
+Step 3 — Docker install
+
+Ubuntu par:
+
+sudo apt install -y docker.io docker-compose-v2
+
+Check:
+
+docker --version
+
+and:
+
+docker compose version
+
+Docker ko startup par enable:
+
+sudo systemctl enable docker
+sudo systemctl start docker
+
+Check:
+
+sudo systemctl status docker
+Step 4 — Evolution API folder
+mkdir -p ~/evolution-api
+cd ~/evolution-api
+
+Ab hum yahan:
+
+docker-compose.yml
+.env
+
+rakhenge.
+
+Evolution API v2 officially Docker installation support karta hai.
+
+Step 5 — Evolution API Docker setup
+
+Yahan ek important point hai:
+
+Aap Evolution API v2.3.7 use kar rahe ho, isliye hum aapke currently working version ko hi Oracle par replicate karenge, instead of blindly latest version use karne ke.
+
+docker-compose.yml mein roughly:
+
+services:
+
+
+  evolution-api:
+    container_name: evolution_api
+    image: atendai/evolution-api:v2.3.7
+    restart: always
+
+
+    ports:
+      - "3000:8080"
+
+
+    env_file:
+      - .env
+
+
+    volumes:
+      - evolution_instances:/evolution/instances
+
+
+volumes:
+  evolution_instances:
+
+Lekin isko abhi run mat karna.
+
+Pehle .env properly banayenge.
+
+Step 6 — .env
+
+Example:
+
+SERVER_TYPE=http
+SERVER_PORT=8080
+
+
+AUTHENTICATION_API_KEY=YOUR_LONG_RANDOM_API_KEY
+
+
+DATABASE_ENABLED=false
+
+
+CACHE_REDIS_ENABLED=false
+
+
+LOG_LEVEL=ERROR
+
+Aapka existing API key agar:
+
+AkashEvolution2026@123456
+
+hai to production mein main recommend karunga ki Oracle par new long random key use karein.
+
+For example:
+
+AUTHENTICATION_API_KEY=EVOL_xxxxxxxxxxxxxxxxxxxxxxxxx
+Step 7 — Evolution API start
+cd ~/evolution-api
+
+Then:
+
+docker compose up -d
+
+Check:
+
+docker ps
+
+Aapko kuch aisa dikhna chahiye:
+
+evolution_api    Up
+
+Logs:
+
+docker logs -f evolution_api
+
+Agar API properly start ho gayi:
+
 Evolution API
-    ↓
-Your WhatsApp Number
-    ↓
-Customer ko WhatsApp Message
 
-Evolution API me QR code se WhatsApp connect kiya ja sakta hai, aur connected number se REST API ke through text message bheja ja sakta hai.
+related startup messages dikhenge.
 
-Step 1 — WhatsApp Web login
+Step 8 — Oracle firewall
 
-Aapko pehle Evolution API apne computer/server par chalani hogi.
+Ye bahut important hai.
 
-Agar aap Windows computer use kar rahe ho, easiest method Docker Desktop hai. Evolution API officially Docker deployment provide karta hai.
+Oracle Cloud mein sirf Ubuntu firewall open karna enough nahi hota. VCN Security List / Network Security Group mein bhi required port allow karna padta hai.
 
-Uske baad browser me Evolution API ka panel/API open hoga aur:
+Temporary testing ke liye:
 
-Create Instance → QR Code → WhatsApp phone → Linked Devices → Link a device
+TCP
+Port: 3000
+Source: 0.0.0.0/0
+
+But production mein directly 3000 public expose nahi karna better hai.
+
+Final architecture main ye rakhunga:
+
+Internet
+   ↓
+HTTPS 443
+   ↓
+Cloudflare
+   ↓
+Evolution API
+
+Port 3000 ko public nahi rakhna padega.
+
+Step 9 — Test Evolution API
+
+Oracle VM ke andar:
+
+curl http://localhost:3000
+
+Agar response Evolution API ka aa gaya, Docker/API working hai.
+
+Phir browser se:
+
+http://YOUR_ORACLE_PUBLIC_IP:3000
+
+test kar sakte hain.
+
+Expected response approximately Evolution API ka welcome/status response hoga.
+
+Step 10 — WhatsApp instance create karna
+
+Ab Evolution API ke through:
+
+Calco-Bot
+
+instance banayenge.
+
+Aapka existing instance name bhi:
+
+Calco-Bot
+
+hai, jo aapke previous testing mein use hua tha.
+
+Instance create hone ke baad QR code milega.
+
+WhatsApp phone mein:
+
+WhatsApp
+→ Linked devices
+→ Link a device
+→ QR scan
 
 QR scan kar dena.
 
-Yaani WhatsApp account aapke phone ka hi rahega, bas WhatsApp Web ki tarah API se connected hoga.
+Step 11 — Pehle Oracle se direct WhatsApp test
 
-Step 2 — Google Sheet
+Google Sheet ko abhi touch nahi karna.
 
-Maan lo Form response Sheet me:
+Pehle Oracle Evolution API se WhatsApp send test karenge.
 
-Timestamp	Name	Mobile	Message
-19/08/2026	Rahul	9876543210	Product enquiry
-Step 3 — Apps Script
+Example:
 
-Google Sheet me:
+curl -X POST "http://localhost:3000/message/sendText/Calco-Bot" \
+-H "apikey: YOUR_API_KEY" \
+-H "Content-Type: application/json" \
+-d '{
+  "number": "919XXXXXXXXX",
+  "text": "Test message from Oracle Evolution API"
+}'
 
-Extensions → Apps Script
+Agar WhatsApp par message aa gaya:
 
-phir ye code:
+Oracle Cloud
+     ↓
+Docker
+     ↓
+Evolution API
+     ↓
+WhatsApp
+
+100% working.
+
+Step 12 — Public HTTPS URL
+
+Ab Apps Script ko Oracle ke private localhost se connect nahi kar sakte.
+
+Apps Script ko chahiye:
+
+https://something.com
+
+Iske liye main Cloudflare Tunnel recommend karunga.
+
+Aapne Windows par already Cloudflare Tunnel use kiya tha:
+
+trycloudflare.com
+
+Lekin production ke liye quick tunnel ke bajay named Cloudflare Tunnel use karna better hai.
+
+Architecture:
+
+Google Apps Script
+       ↓
+https://whatsapp.yourdomain.com
+       ↓
+Cloudflare
+       ↓
+Oracle Cloud
+       ↓
+localhost:3000
+       ↓
+Evolution API
+
+Isse Oracle ka 3000 port directly internet par expose nahi karna padega.
+
+Step 13 — Google Apps Script
+
+Aapki Google Sheet mein maan lo:
+
+A	B	C
+Mobile	Message	Status
+919XXXXXXXXX	Payment received	
+919XXXXXXXXX	Your order is ready	
+
+Apps Script:
+
+function sendWhatsApp(number, message) {
 
 
-function onFormSubmit(e) {
+  const url =
+    "https://whatsapp.yourdomain.com/message/sendText/Calco-Bot";
 
-  const row = e.values;
-
-  const name = row[1];
-  const mobile = row[2];
-
-  const message =
-    "Hello " + name + ",\n\n" +
-    "Thank you for contacting us.\n" +
-    "We have received your enquiry.\n\n" +
-    "Regards,\n" +
-    "Calco Poly Technik Pvt Ltd";
-
-  const apiUrl =
-    "http://YOUR_SERVER_IP:8080/message/sendText/YOUR_INSTANCE";
-
-  const apiKey = "YOUR_API_KEY";
 
   const payload = {
-    number: "91" + mobile,
-    options: {
-      delay: 1200,
-      presence: "composing"
-    },
-    textMessage: {
-      text: message
-    }
+    number: String(number),
+    text: message
   };
+
 
   const options = {
     method: "post",
     contentType: "application/json",
     headers: {
-      "apikey": apiKey
+      "apikey": "YOUR_EVOLUTION_API_KEY"
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
 
-  const response = UrlFetchApp.fetch(apiUrl, options);
 
+  const response = UrlFetchApp.fetch(url, options);
+
+
+  Logger.log(response.getResponseCode());
   Logger.log(response.getContentText());
+
+
+  return response;
 }
+Step 14 — Sheet se automatically WhatsApp
 
-Evolution API ka text-message endpoint POST /message/sendText/[instance] hai aur request me number aur text diya jata hai.
+Aapki Whatsapp sheet ke according, jo aap pehle bana rahe the, hum structure kuch aisa rakh sakte hain:
 
-Step 4 — Trigger lagana
+Mobile	Message	Status
+919XXXXXXXXX	Hello Akash	SENT
+919XXXXXXXXX	Payment pending	NOT SENT
+919XXXXXXXXX	Order ready	SENT
 
-Apps Script me:
+Apps Script:
+
+function sendPendingWhatsApp() {
+
+
+  const sheet = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName("Whatsapp");
+
+
+  const lastRow = sheet.getLastRow();
+
+
+  if (lastRow < 2) return;
+
+
+  const data = sheet
+    .getRange(2, 1, lastRow - 1, 3)
+    .getValues();
+
+
+  for (let i = 0; i < data.length; i++) {
+
+
+    const number = data[i][0];
+    const message = data[i][1];
+    const status = data[i][2];
+
+
+    if (!number || !message) {
+      continue;
+    }
+
+
+    if (status === "SENT") {
+      continue;
+    }
+
+
+    try {
+
+
+      const response = UrlFetchApp.fetch(
+        "https://whatsapp.yourdomain.com/message/sendText/Calco-Bot",
+        {
+          method: "post",
+
+
+          contentType: "application/json",
+
+
+          headers: {
+            "apikey": "YOUR_EVOLUTION_API_KEY"
+          },
+
+
+          payload: JSON.stringify({
+            number: String(number),
+            text: String(message)
+          }),
+
+
+          muteHttpExceptions: true
+        }
+      );
+
+
+      const code = response.getResponseCode();
+
+
+      if (code >= 200 && code < 300) {
+
+
+        sheet
+          .getRange(i + 2, 3)
+          .setValue("SENT");
+
+
+      } else {
+
+
+        sheet
+          .getRange(i + 2, 3)
+          .setValue("NOT SENT");
+
+
+      }
+
+
+    } catch (error) {
+
+
+      sheet
+        .getRange(i + 2, 3)
+        .setValue("NOT SENT");
+
+
+      Logger.log(error);
+
+
+    }
+  }
+}
+Step 15 — Automatic notification
+
+Phir Apps Script mein:
 
 Triggers → Add Trigger
 
-Select:
-
 Function:
-onFormSubmit
 
+sendPendingWhatsApp
 
-Event source:
-From spreadsheet
+Event:
 
-
-Event type:
-On form submit
-
-Ab jab bhi Google Form submit hoga:
-
-
-Form → Sheet → Apps Script → Evolution API → WhatsApp
-
-automatically message chala jayega.
-
-⚠️ Sabse important: "free browser login"
-
-Agar aapka matlab hai:
-
-"Main koi paid WhatsApp API nahi lena chahta. Browser me QR scan karunga aur apne normal WhatsApp se message jayega."
-
-Haan, ye Evolution API ke WhatsApp-Web/Baileys method se ho sakta hai. Official Meta Cloud API se ye same setup nahi hai. Evolution API khud bhi warn karta hai ki WhatsApp-Web-based method official API ki comparison me limitations rakh sakta hai.
-
-Aapke case me main aapko next step me Windows PC par Evolution API ko completely free setup karwa sakta hoon — Docker install se lekar QR scan aur phir Google Sheet Apps Script tak.
-
-
-Step 1 — WhatsApp Web login
-
-Aapko pehle Evolution API apne computer/server par chalani hogi.
-
-Agar aap Windows computer use kar rahe ho, easiest method Docker Desktop hai. Evolution API officially Docker deployment provide karta hai.
-
-Uske baad browser me Evolution API ka panel/API open hoga aur:
-
-Create Instance → QR Code → WhatsApp phone → Linked Devices → Link a device
-
-QR scan kar dena.
-
-ye batao step by step kese step kare
-
-Bilkul. Chaliye Windows PC par zero se setup karte hain. Main aapko ek-ek step dunga; pehle Evolution API ko locally chalayenge, phir WhatsApp QR scan, uske baad Google Apps Script connect karenge.
-
-Important correction: current Evolution API docs me Docker image/configuration me changes aaye hain, isliye main current official documentation ke according setup bata raha hoon. Evolution API open-source hai aur Baileys-based WhatsApp Web connection support karta hai.
-
-
-
-STEP 1 — Docker Desktop install karo
-
-Windows PC par browser kholo aur official Docker Desktop download karo:
-
-Docker Desktop for Windows — Official
-
-Docker Desktop Windows par WSL 2 backend ke saath use kiya ja sakta hai.
-
-Install karne ke baad
-Docker Desktop Installer.exe open karo.
-Installation ke time Use WSL 2 instead of Hyper-V option selected rehne do.
-Installation complete karo.
-Docker Desktop open karo.
-Agar terms/acceptance aaye to Accept karo.
-Docker Desktop me whale icon running hona chahiye.
-
-Docker ki official documentation bhi WSL 2 ko recommended/default backend batati hai.
-
-STEP 2 — Check karo Docker properly chal raha hai
-
-Windows me:
-
-Start → PowerShell
-
-open karo.
-
-Ye command likho:
-
-docker --version
-
-Aisa kuch aana chahiye:
-
-Docker version xx.x.x
-
-Phir:
-
-docker ps
-
-Agar table aa jaye aur koi error nahi aaye, Docker ready hai.
-
-
-STEP 3 — Evolution API folder banao
-
-Desktop par ek folder banao:
-
-EvolutionAPI
+Time-driven
 
 Example:
 
-C:\EvolutionAPI
-
-Ab PowerShell me:
-
-cd C:\EvolutionAPI
-
-
-STEP 4 — .env file banao
-
-Notepad kholo aur ye likho:
-
-AUTHENTICATION_API_KEY=AkashEvolution2026@123456
-
-File ko save karo:
-
-C:\EvolutionAPI\.env
-
-⚠️ Dhyan rahe file ka naam:
-
-.env
-
-ho, .env.txt nahi.
-
-STEP 5 — Evolution API start karo
-
-Ab PowerShell me ye command chalao:
-
-docker pull evoapicloud/evolution-api:latest
-
-Current Evolution API repository Docker ke liye evoapicloud/evolution-api:latest image provide karti hai.
-
-Download complete hone ke baad:
-
-docker run -d --name evolution_api -p 8080:8080 --env-file C:\EvolutionAPI\.env evoapicloud/evolution-api:latest
-
-Thoda wait karo.
-
-Phir:
-
-docker ps
-
-Aapko evolution_api naam ka container running dikhna chahiye.
-
-STEP 6 — Browser me check karo
-
-Chrome kholo aur ye address:
-
-Evolution API local server
-
-Agar API correctly start ho gayi hai to response/API page milna chahiye.
-
-Official Docker documentation ke according local deployment ko http://localhost:8080 par access karke verify kiya ja sakta hai.
-
-STEP 7 — Swagger/API page kholo
-
-Browser me:
-
-Evolution API Swagger
-
-
-open karo.
-
-Yahan Evolution API ke endpoints milenge.
-
-STEP 8 — WhatsApp Instance create karna
-
-Ab hum WhatsApp connect karenge.
-
-Evolution API me instance create karne ke liye endpoint available hai:
-
-POST /instance/create
-
-Aur WhatsApp Web/Baileys integration ke liye:
-
-integration: WHATSAPP-BAILEYS
-
-use hota hai. QR code generation bhi supported hai.
-
-Swagger me:
-
-Instance → POST /instance/create
-
-open karo.
-
-Try it out dabao.
-
-Body me approximately:
-
-{
-  "instanceName": "calco-whatsapp",
-  "integration": "WHATSAPP-BAILEYS",
-  "qrcode": true
-}
-
-bhejna hoga.
-
-Lekin yahan ek important point hai: aapke installed Evolution API version ke hisaab se exact Swagger fields/version differ ho sakte hain. Isliye blindly next command nahi dena chahta.
-
-Abhi aap sirf ye 3 steps karo:
-
-1. Docker Desktop install karo
-
-2. PowerShell me:
-
-docker --version
-
-3. Phir:
-
-docker pull evoapicloud/evolution-api:latest
-
-Uske baad mujhe PowerShell ka screenshot bhej do.
-
-Main uske baad aapko STEP 2: Evolution API start → browser me open → instance create → QR code → phone se WhatsApp scan exactly aapke screen ke according karwaunga.
-
-
-Uske baad final me:
-
-Google Form → Google Sheet → Apps Script → WhatsApp automatic message
-
-bhi connect kar denge.
-
-PS C:\Users\ASUS> docker --version
-Docker version 29.7.2, build a7dcaa6
-PS C:\Users\ASUS> STEP 3 — Evolution API folder banao
-Desktop par ek folder banao:
-
-EvolutionAPI
-
-Example:
-
-C:\EvolutionAPI
-
-Ab PowerShell me:
-
-cd C:\EvolutionAPI
-STEP 4 — .env file banao
-
-Notepad kholo aur ye likho:
-
-AUTHENTICATION_API_KEY=AkashEvolution2026@123456
-
-File ko save karo:
-
-C:\EvolutionAPI\.env
-
-⚠️ Dhyan rahe file ka naam:
-
-.env
-
-ho, .env.txt nahi. step 3 or 4 cmd se karte hai
-
-Haan, Step 3 aur Step 4 dono CMD/PowerShell se hi kar sakte hain. Aap abhi PowerShell me ho, to wahi se karo.
-
-STEP 3 — Folder CMD/PowerShell se banao
-
-Ab ye command chalao:
-
-mkdir C:\EvolutionAPI
-
-Phir folder me jao:
-
-cd C:\EvolutionAPI
-
-Check karne ke liye:
-
-pwd
-
-Output ye hona chahiye:
-
-Path
-----
-C:\EvolutionAPI
-STEP 4 — .env file CMD/PowerShell se banao
-
-Ab ye command chalao:
-
-Set-Content -Path "C:\EvolutionAPI\.env" -Value "AUTHENTICATION_API_KEY=AkashEvolution2026@123456"
-
-Ab check karo:
-
-Get-ChildItem -Force
-
-Aapko:
-
-.env
-
-dikhna chahiye.
-
-.env ke andar kya hai check karna ho
-Get-Content C:\EvolutionAPI\.env
-
-Output:
-
-AUTHENTICATION_API_KEY=AkashEvolution2026@123456
-
-
-Abhi tak complete
-
-Aapke paas:
-
-C:\
-└── EvolutionAPI
-    └── .env
-
-hona chahiye.
-
-Abhi Docker run mat karo. Pehle ye commands chalao:
-
-mkdir C:\EvolutionAPI
-cd C:\EvolutionAPI
-Set-Content -Path "C:\EvolutionAPI\.env" -Value "AUTHENTICATION_API_KEY=AkashEvolution2026@123456"
-Get-ChildItem -Force
-Get-Content C:\EvolutionAPI\.env
-
+Every 1 minute
+
+Then system:
+
+Google Sheet
+    ↓
+Every 1 minute
+    ↓
+Apps Script
+    ↓
+Check Status
+    ↓
+Blank status?
+    ↓
+Evolution API
+    ↓
+WhatsApp
+    ↓
+SENT
+Final architecture
+
+Aapka complete production system:
+
+                 ┌──────────────────┐
+                 │   Google Sheet   │
+                 │                  │
+                 │ Mobile           │
+                 │ Message          │
+                 │ Status           │
+                 └────────┬─────────┘
+                          │
+                          ↓
+                 ┌──────────────────┐
+                 │ Google Apps      │
+                 │ Script           │
+                 └────────┬─────────┘
+                          │ HTTPS
+                          ↓
+                 ┌──────────────────┐
+                 │    Cloudflare    │
+                 │      Tunnel      │
+                 └────────┬─────────┘
+                          │
+                          ↓
+              ┌─────────────────────────┐
+              │     Oracle Cloud        │
+              │                         │
+              │ Ubuntu 24.04            │
+              │ 2 OCPU + 8 GB RAM       │
+              │                         │
+              │ ┌─────────────────────┐ │
+              │ │ Docker              │ │
+              │ │                     │ │
+              │ │ Evolution API 2.3.7 │ │
+              │ └──────────┬──────────┘ │
+              └────────────┼────────────┘
+                           │
+                           ↓
+                     WhatsApp
+
+Oracle Always Free resources lifetime ke liye available hain, although Oracle capacity availability/idle-instance rules apply; current documentation specifically says A1 Always Free allocation is 2 OCPU + 12 GB RAM total.
+
+Hum ise 6 stages mein karenge
+
+Stage 1: Oracle VM create
+Stage 2: Docker install
+Stage 3: Evolution API 2.3.7 install
+Stage 4: WhatsApp Calco-Bot connect + test
+Stage 5: Cloudflare HTTPS domain/tunnel
+Stage 6: Google Sheet → Apps Script → automatic WhatsApp + SENT/NOT SENT
+
+Abhi sabse pehle Stage 1 karte hain. Aap Oracle Cloud mein Create Instance screen par jao aur VM.Standard.A1.Flex + Ubuntu 24.04 + 2 OCPU + 8 GB + Public IPv4 select karo. Us screen ka screenshot bhej do; main exactly bata dunga kis field mein kya select karna hai.
+
+Los archivos, las imágenes y el análisis de datos no estarán disponibles hasta que tu uso se restablezca mañana a las 2:34 a.m.. Continúa chateando solo con texto o mejora tu plan para tener más acceso.
+Prueba Plus gratis
