@@ -1,578 +1,178 @@
-Bilkul. Aapka setup Google Sheet → Apps Script → Evolution API → WhatsApp hoga, aur Evolution API ko Oracle Cloud Always Free VM + Docker par permanently run karenge.
+3.1 Server update karo
 
-Aapke case mein ye architecture best rahega:
+Ye command paste karo:
 
-Google Sheet
-    ↓
-Google Apps Script
-    ↓ HTTPS
-Oracle Cloud Public IP / Domain
-    ↓
-Nginx / Cloudflare Tunnel
-    ↓
-Evolution API Docker
-    ↓
-WhatsApp
+sudo apt update && sudo apt upgrade -y
 
-Aapka Evolution API abhi local Windows machine par localhost:3000 par chal raha hai aur WhatsApp sending bhi test ho chuki hai. Ab usko Oracle Cloud par shift kar denge.
+Thoda time lagega. Complete hone do.
 
-Oracle ke current Always Free resources mein Ampere A1 ke total 2 OCPU + 12 GB RAM available hain, isliye 2 OCPU + 8 GB RAM ka VM comfortably banaya ja sakta hai.
+3.2 Docker install karo
 
-Step 1 — Oracle Cloud VM banana
+Ab ye command:
 
-Oracle Cloud Console mein:
+curl -fsSL https://get.docker.com | sudo sh
 
-Compute → Instances → Create Instance
+Install complete hone do.
 
-Settings:
+3.3 Docker check karo
+sudo docker --version
 
-Name
-evolution-api
-Image
-Ubuntu 24.04
+Aapko kuch aisa output milna chahiye:
 
-Oracle currently Ubuntu 24.04 ke ARM/AArch64 images provide karta hai, jo Ampere A1 ke liye suitable hain.
+Docker version 28.x.x
 
-Shape
+Version number alag ho sakta hai.
 
-Select:
 
-VM.Standard.A1.Flex
+3.4 Docker Compose check karo
+sudo docker compose version
 
-Resources:
+Aisa output aana chahiye:
 
-OCPU: 2
-Memory: 8 GB
+Docker Compose version v2.x.x
 
-Oracle ke Always Free allowance mein 2 OCPU aur 12 GB memory total available hai, so 2 OCPU + 8 GB ek safe configuration hai.
+3.5 Docker ko sudo ke bina chalane ke liye
 
-Networking
+Ye command run karo:
 
-Ensure:
+sudo usermod -aG docker $USER
 
-Assign a public IPv4 address
+Phir:
 
-Oracle ke official guidance mein public IP assign karna bhi recommended deployment flow ka part hai.
+newgrp docker
 
-SSH Key
-
-Generate SSH key pair select karke private key download kar lena.
-
-Example:
-
-evolution-api.key
-
-Is file ko safe rakhna.
-
-Step 2 — Oracle VM mein SSH
-
-Windows PowerShell se:
-
-ssh -i "C:\Users\YOUR_NAME\Downloads\evolution-api.key" ubuntu@YOUR_PUBLIC_IP
-
-Example:
-
-ssh -i "C:\Users\Akash\Downloads\evolution-api.key" ubuntu@152.xxx.xxx.xxx
-
-Login hone ke baad:
-
-sudo apt update
-sudo apt upgrade -y
-Step 3 — Docker install
-
-Ubuntu par:
-
-sudo apt install -y docker.io docker-compose-v2
-
-Check:
+Ab check:
 
 docker --version
 
-and:
+Aur:
 
 docker compose version
 
-Docker ko startup par enable:
+Step 4
 
-sudo systemctl enable docker
-sudo systemctl start docker
 
-Check:
+4.1 Evolution API ka folder banao
 
-sudo systemctl status docker
-Step 4 — Evolution API folder
+AWS terminal me ye command chalao:
+
 mkdir -p ~/evolution-api
 cd ~/evolution-api
 
-Ab hum yahan:
-
-docker-compose.yml
-.env
-
-rakhenge.
-
-Evolution API v2 officially Docker installation support karta hai.
-
-Step 5 — Evolution API Docker setup
-
-Yahan ek important point hai:
-
-Aap Evolution API v2.3.7 use kar rahe ho, isliye hum aapke currently working version ko hi Oracle par replicate karenge, instead of blindly latest version use karne ke.
-
-docker-compose.yml mein roughly:
-
-services:
-
-
-  evolution-api:
-    container_name: evolution_api
-    image: atendai/evolution-api:v2.3.7
-    restart: always
-
-
-    ports:
-      - "3000:8080"
-
-
-    env_file:
-      - .env
-
-
-    volumes:
-      - evolution_instances:/evolution/instances
-
-
-volumes:
-  evolution_instances:
-
-Lekin isko abhi run mat karna.
-
-Pehle .env properly banayenge.
-
-Step 6 — .env
-
-Example:
-
-SERVER_TYPE=http
-SERVER_PORT=8080
-
-
-AUTHENTICATION_API_KEY=YOUR_LONG_RANDOM_API_KEY
-
-
-DATABASE_ENABLED=false
-
-
-CACHE_REDIS_ENABLED=false
-
-
-LOG_LEVEL=ERROR
-
-Aapka existing API key agar:
-
-AkashEvolution2026@123456
-
-hai to production mein main recommend karunga ki Oracle par new long random key use karein.
-
-For example:
-
-AUTHENTICATION_API_KEY=EVOL_xxxxxxxxxxxxxxxxxxxxxxxxx
-Step 7 — Evolution API start
-cd ~/evolution-api
-
-Then:
-
-docker compose up -d
 
 Check:
 
+pwd
+
+Output kuch aisa hona chahiye:
+
+/home/ubuntu/evolution-api
+4.2 Docker Compose file banao
+
+Ye command chalao:
+
+nano docker-compose.yml
+Paste This 
+#  POSTGRES_PASSWORD: CHANGE_THIS_DB_PASSWORD change this line
+# SERVER_URL: http://YOUR_EC2_PUBLIC_IP:8080
+# AUTHENTICATION_API_KEY: CHANGE_THIS_API_KEY
+# DATABASE_CONNECTION_URI: postgresql://evolution:CHANGE_THIS_DB_PASSWORD@postgres:5432/evolution
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: CHANGE_THIS_DB_PASSWORD
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: evolution_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution_api
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: http://YOUR_EC2_PUBLIC_IP:8080
+
+      AUTHENTICATION_API_KEY: CHANGE_THIS_API_KEY
+
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:CHANGE_THIS_DB_PASSWORD@postgres:5432/evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+
+      CACHE_LOCAL_ENABLED: "false"
+
+      CONFIG_SESSION_PHONE_CLIENT: Evolution API
+      CONFIG_SESSION_PHONE_NAME: Chrome
+
+      QRCODE_LIMIT: "30"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+6.4 File save karo
+
+Nano me:
+
+Ctrl + O
+
+phir:
+
+Enter
+
+phir:
+
+Ctrl + X
+
+6.5 Configuration check karo
+
+
+docker compose config
+
+6.6 Ab containers start karo
+docker compose up -d
+
+Thoda time lagega kyunki PostgreSQL, Redis aur Evolution API images download hongi.
+
+Phir:
+
 docker ps
+Hume ideally 3 containers chahiye:
 
-Aapko kuch aisa dikhna chahiye:
+evolution_api
+evolution_postgres
+evolution_redis
 
-evolution_api    Up
 
-Logs:
 
-docker logs -f evolution_api
-
-Agar API properly start ho gayi:
-
-Evolution API
-
-related startup messages dikhenge.
-
-Step 8 — Oracle firewall
-
-Ye bahut important hai.
-
-Oracle Cloud mein sirf Ubuntu firewall open karna enough nahi hota. VCN Security List / Network Security Group mein bhi required port allow karna padta hai.
-
-Temporary testing ke liye:
-
-TCP
-Port: 3000
-Source: 0.0.0.0/0
-
-But production mein directly 3000 public expose nahi karna better hai.
-
-Final architecture main ye rakhunga:
-
-Internet
-   ↓
-HTTPS 443
-   ↓
-Cloudflare
-   ↓
-Evolution API
-
-Port 3000 ko public nahi rakhna padega.
-
-Step 9 — Test Evolution API
-
-Oracle VM ke andar:
-
-curl http://localhost:3000
-
-Agar response Evolution API ka aa gaya, Docker/API working hai.
-
-Phir browser se:
-
-http://YOUR_ORACLE_PUBLIC_IP:3000
-
-test kar sakte hain.
-
-Expected response approximately Evolution API ka welcome/status response hoga.
-
-Step 10 — WhatsApp instance create karna
-
-Ab Evolution API ke through:
-
-Calco-Bot
-
-instance banayenge.
-
-Aapka existing instance name bhi:
-
-Calco-Bot
-
-hai, jo aapke previous testing mein use hua tha.
-
-Instance create hone ke baad QR code milega.
-
-WhatsApp phone mein:
-
-WhatsApp
-→ Linked devices
-→ Link a device
-→ QR scan
-
-QR scan kar dena.
-
-Step 11 — Pehle Oracle se direct WhatsApp test
-
-Google Sheet ko abhi touch nahi karna.
-
-Pehle Oracle Evolution API se WhatsApp send test karenge.
-
-Example:
-
-curl -X POST "http://localhost:3000/message/sendText/Calco-Bot" \
--H "apikey: YOUR_API_KEY" \
--H "Content-Type: application/json" \
--d '{
-  "number": "919XXXXXXXXX",
-  "text": "Test message from Oracle Evolution API"
-}'
-
-Agar WhatsApp par message aa gaya:
-
-Oracle Cloud
-     ↓
-Docker
-     ↓
-Evolution API
-     ↓
-WhatsApp
-
-100% working.
-
-Step 12 — Public HTTPS URL
-
-Ab Apps Script ko Oracle ke private localhost se connect nahi kar sakte.
-
-Apps Script ko chahiye:
-
-https://something.com
-
-Iske liye main Cloudflare Tunnel recommend karunga.
-
-Aapne Windows par already Cloudflare Tunnel use kiya tha:
-
-trycloudflare.com
-
-Lekin production ke liye quick tunnel ke bajay named Cloudflare Tunnel use karna better hai.
-
-Architecture:
-
-Google Apps Script
-       ↓
-https://whatsapp.yourdomain.com
-       ↓
-Cloudflare
-       ↓
-Oracle Cloud
-       ↓
-localhost:3000
-       ↓
-Evolution API
-
-Isse Oracle ka 3000 port directly internet par expose nahi karna padega.
-
-Step 13 — Google Apps Script
-
-Aapki Google Sheet mein maan lo:
-
-A	B	C
-Mobile	Message	Status
-919XXXXXXXXX	Payment received	
-919XXXXXXXXX	Your order is ready	
-
-Apps Script:
-
-function sendWhatsApp(number, message) {
-
-
-  const url =
-    "https://whatsapp.yourdomain.com/message/sendText/Calco-Bot";
-
-
-  const payload = {
-    number: String(number),
-    text: message
-  };
-
-
-  const options = {
-    method: "post",
-    contentType: "application/json",
-    headers: {
-      "apikey": "YOUR_EVOLUTION_API_KEY"
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-
-  const response = UrlFetchApp.fetch(url, options);
-
-
-  Logger.log(response.getResponseCode());
-  Logger.log(response.getContentText());
-
-
-  return response;
-}
-Step 14 — Sheet se automatically WhatsApp
-
-Aapki Whatsapp sheet ke according, jo aap pehle bana rahe the, hum structure kuch aisa rakh sakte hain:
-
-Mobile	Message	Status
-919XXXXXXXXX	Hello Akash	SENT
-919XXXXXXXXX	Payment pending	NOT SENT
-919XXXXXXXXX	Order ready	SENT
-
-Apps Script:
-
-function sendPendingWhatsApp() {
-
-
-  const sheet = SpreadsheetApp
-    .getActiveSpreadsheet()
-    .getSheetByName("Whatsapp");
-
-
-  const lastRow = sheet.getLastRow();
-
-
-  if (lastRow < 2) return;
-
-
-  const data = sheet
-    .getRange(2, 1, lastRow - 1, 3)
-    .getValues();
-
-
-  for (let i = 0; i < data.length; i++) {
-
-
-    const number = data[i][0];
-    const message = data[i][1];
-    const status = data[i][2];
-
-
-    if (!number || !message) {
-      continue;
-    }
-
-
-    if (status === "SENT") {
-      continue;
-    }
-
-
-    try {
-
-
-      const response = UrlFetchApp.fetch(
-        "https://whatsapp.yourdomain.com/message/sendText/Calco-Bot",
-        {
-          method: "post",
-
-
-          contentType: "application/json",
-
-
-          headers: {
-            "apikey": "YOUR_EVOLUTION_API_KEY"
-          },
-
-
-          payload: JSON.stringify({
-            number: String(number),
-            text: String(message)
-          }),
-
-
-          muteHttpExceptions: true
-        }
-      );
-
-
-      const code = response.getResponseCode();
-
-
-      if (code >= 200 && code < 300) {
-
-
-        sheet
-          .getRange(i + 2, 3)
-          .setValue("SENT");
-
-
-      } else {
-
-
-        sheet
-          .getRange(i + 2, 3)
-          .setValue("NOT SENT");
-
-
-      }
-
-
-    } catch (error) {
-
-
-      sheet
-        .getRange(i + 2, 3)
-        .setValue("NOT SENT");
-
-
-      Logger.log(error);
-
-
-    }
-  }
-}
-Step 15 — Automatic notification
-
-Phir Apps Script mein:
-
-Triggers → Add Trigger
-
-Function:
-
-sendPendingWhatsApp
-
-Event:
-
-Time-driven
-
-Example:
-
-Every 1 minute
-
-Then system:
-
-Google Sheet
-    ↓
-Every 1 minute
-    ↓
-Apps Script
-    ↓
-Check Status
-    ↓
-Blank status?
-    ↓
-Evolution API
-    ↓
-WhatsApp
-    ↓
-SENT
-Final architecture
-
-Aapka complete production system:
-
-                 ┌──────────────────┐
-                 │   Google Sheet   │
-                 │                  │
-                 │ Mobile           │
-                 │ Message          │
-                 │ Status           │
-                 └────────┬─────────┘
-                          │
-                          ↓
-                 ┌──────────────────┐
-                 │ Google Apps      │
-                 │ Script           │
-                 └────────┬─────────┘
-                          │ HTTPS
-                          ↓
-                 ┌──────────────────┐
-                 │    Cloudflare    │
-                 │      Tunnel      │
-                 └────────┬─────────┘
-                          │
-                          ↓
-              ┌─────────────────────────┐
-              │     Oracle Cloud        │
-              │                         │
-              │ Ubuntu 24.04            │
-              │ 2 OCPU + 8 GB RAM       │
-              │                         │
-              │ ┌─────────────────────┐ │
-              │ │ Docker              │ │
-              │ │                     │ │
-              │ │ Evolution API 2.3.7 │ │
-              │ └──────────┬──────────┘ │
-              └────────────┼────────────┘
-                           │
-                           ↓
-                     WhatsApp
-
-Oracle Always Free resources lifetime ke liye available hain, although Oracle capacity availability/idle-instance rules apply; current documentation specifically says A1 Always Free allocation is 2 OCPU + 12 GB RAM total.
-
-Hum ise 6 stages mein karenge
-
-Stage 1: Oracle VM create
-Stage 2: Docker install
-Stage 3: Evolution API 2.3.7 install
-Stage 4: WhatsApp Calco-Bot connect + test
-Stage 5: Cloudflare HTTPS domain/tunnel
-Stage 6: Google Sheet → Apps Script → automatic WhatsApp + SENT/NOT SENT
-
-Abhi sabse pehle Stage 1 karte hain. Aap Oracle Cloud mein Create Instance screen par jao aur VM.Standard.A1.Flex + Ubuntu 24.04 + 2 OCPU + 8 GB + Public IPv4 select karo. Us screen ka screenshot bhej do; main exactly bata dunga kis field mein kya select karna hai.
-
-Los archivos, las imágenes y el análisis de datos no estarán disponibles hasta que tu uso se restablezca mañana a las 2:34 a.m.. Continúa chateando solo con texto o mejora tu plan para tener más acceso.
-Prueba Plus gratis
