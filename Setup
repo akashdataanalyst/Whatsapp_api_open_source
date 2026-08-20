@@ -272,3 +272,182 @@ curl -i -X POST "http://15.206.165.147:8080/message/sendText/Akash_Sharma" \
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function sendWhatsAppMessages() {
+
+  const SHEET_NAME = "Whatsapp";
+
+  const API_URL =
+    "http://15.206.165.147:8080/message/sendText/Akash_Sharma";
+
+  const API_KEY =
+    "Ev0lution_2026_StrongKey_9281";
+
+
+  const sheet =
+    SpreadsheetApp
+      .getActiveSpreadsheet()
+      .getSheetByName(SHEET_NAME);
+
+
+  if (!sheet) {
+    throw new Error("Sheet 'Whatsapp' not found");
+  }
+
+
+  const lastRow = sheet.getLastRow();
+
+
+  if (lastRow < 2) {
+    Logger.log("No data found");
+    return;
+  }
+
+
+  const data =
+    sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+
+
+  data.forEach((row, index) => {
+
+    const name = row[0];
+    const number = row[1];
+    const status = row[2];
+
+    const sheetRow = index + 2;
+
+
+    if (!name || !number) {
+      return;
+    }
+
+
+    if (
+      String(status).trim().toLowerCase() === "sent"
+    ) {
+      return;
+    }
+
+
+    let whatsappNumber =
+      String(number).replace(/\D/g, "");
+
+
+    if (whatsappNumber.length === 10) {
+      whatsappNumber = "91" + whatsappNumber;
+    }
+
+
+    if (whatsappNumber.length < 12) {
+
+      sheet
+        .getRange(sheetRow, 3)
+        .setValue("Invalid Number");
+
+      return;
+    }
+
+
+    const message =
+      `Hello ${name}, this is a message from Calco Bot.`;
+
+
+    // Evolution API v2.3.7
+    const payload = {
+      number: whatsappNumber,
+      text: message
+    };
+
+
+    const options = {
+
+      method: "post",
+
+      contentType: "application/json",
+
+      headers: {
+        apikey: API_KEY
+      },
+
+      payload: JSON.stringify(payload),
+
+      muteHttpExceptions: true
+    };
+
+
+    try {
+
+      const response =
+        UrlFetchApp.fetch(API_URL, options);
+
+
+      const responseCode =
+        response.getResponseCode();
+
+
+      const responseText =
+        response.getContentText();
+
+
+      Logger.log(
+        "Row " + sheetRow +
+        " | Code: " + responseCode +
+        " | Response: " + responseText
+      );
+
+
+      if (
+        responseCode >= 200 &&
+        responseCode < 300
+      ) {
+
+        sheet
+          .getRange(sheetRow, 3)
+          .setValue("Sent");
+
+      } else {
+
+        sheet
+          .getRange(sheetRow, 3)
+          .setValue(
+            "Not Sent: " + responseCode
+          );
+      }
+
+
+    } catch (error) {
+
+      Logger.log(
+        "Row " + sheetRow +
+        " | Error: " + error.message
+      );
+
+
+      sheet
+        .getRange(sheetRow, 3)
+        .setValue("Not Sent");
+    }
+
+  });
+
+}
+
+
+
