@@ -174,5 +174,101 @@ evolution_api
 evolution_postgres
 evolution_redis
 
+Browser PR 
+{"status":200,"message":"Welcome to the Evolution API, it is working!","version":"2.3.7","clientName":"evolution","manager":"http://15.206.165.147:8080/manager","documentation":"https://doc.evolution-api.com","whatsappWebVersion":"2.3000.1045656637"}
+
+Perfect! Evolution API successfully run ho gayi hai.
+
+Aapka response:
+
+{
+  "status": 200,
+  "message": "Welcome to the Evolution API, it is working!",
+  "version": "2.3.7"
+}
+
+iska matlab:
+
+✅ AWS EC2 working
+✅ Docker working
+✅ PostgreSQL working
+✅ Redis working
+✅ Evolution API working
+✅ Port 8080 working
+✅ Evolution API v2.3.7 running
+
+Ab hum WhatsApp connect karenge.
+
+Step 11 — WhatsApp Instance Create Karna
+
+Evolution API me pehle ek instance create karna hai.
+
+Aapki API ka base URL:
+
+http://15.206.165.147:8080
+
+Aur API key jo aapne docker-compose.yml me set ki hai, wahi authentication key hai.
+
+11.1 Instance create command
+
+AWS terminal me ye command run mat karo abhi; pehle hum API request properly banayenge.
+
+Hum endpoint use karenge:
+
+POST /instance/create
+
+Iske liye hume:
+
+API URL
+API Key
+Instance name
+Integration
+
+set karna hoga.
+
+Example instance:
+
+marketing
+11.2 Sabse easy method — Swagger/API Manager
+
+Aapke response me ye URL bhi diya hai:
+
+http://15.206.165.147:8080/manager
+
+Browser me open karo:
+
+Evolution API Manager
+
+Agar login/API key maange, apni current API key enter karo.
+
+⚠️ Security
+
+API key mujhe mat bhejna.
+
+Abhi ek kaam karo
+
+Browser me:
+
+http://15.206.165.147:8080/manager
+
+open karo.
+Scan Karo Connect karo 
+
+
+Google Sheet → Apps Script → Evolution API → WhatsApp message 🚀
+
+#manual RUn ka Code 
+
+
+curl -i -X POST "http://15.206.165.147:8080/message/sendText/Akash_Sharma" \
+  -H "Content-Type: application/json" \
+  -H "apikey: Ev0lution_2026_StrongKey_9281" \
+  -d '{
+    "number": "919729219910",
+    "textMessage": {
+      "text": "Hello, ye manual test message hai."
+    }
+  }'
+
 
 
